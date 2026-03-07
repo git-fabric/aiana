@@ -53,12 +53,12 @@ async function registerWithGateway() {
     tailscale_node: 'fabric-aiana',
     worker_pool: { total: 0, healthy: 0, workers: [] },
     routes: [
-      { prefix: 'fabric.memory', local_pref: 100, description: 'Semantic memory — recall, search, add, feedback, sessions' },
-      { prefix: 'fabric.memory.recall', local_pref: 100, description: 'Memory recall — project-scoped context retrieval' },
-      { prefix: 'fabric.memory.search', local_pref: 100, description: 'Memory search — semantic similarity search over stored memories' },
-      { prefix: 'fabric.memory.add', local_pref: 100, description: 'Memory storage — add new memories with secret scrubbing' },
-      { prefix: 'fabric.memory.feedback', local_pref: 100, description: 'Memory feedback — rate recalled memories for relevance tuning' },
-      { prefix: 'fabric.memory.sessions', local_pref: 100, description: 'Session management — list sessions grouped by project' },
+      { prefix: 'fabric.memory', local_pref: 100, confidence_floor: 0.7, description: 'Semantic memory — recall, search, add, feedback, sessions' },
+      { prefix: 'fabric.memory.recall', local_pref: 100, confidence_floor: 0.7, description: 'Memory recall — project-scoped context retrieval' },
+      { prefix: 'fabric.memory.search', local_pref: 100, confidence_floor: 0.7, description: 'Memory search — semantic similarity search over stored memories' },
+      { prefix: 'fabric.memory.add', local_pref: 100, confidence_floor: 0.7, description: 'Memory storage — add new memories with secret scrubbing' },
+      { prefix: 'fabric.memory.feedback', local_pref: 100, confidence_floor: 0.7, description: 'Memory feedback — rate recalled memories for relevance tuning' },
+      { prefix: 'fabric.memory.sessions', local_pref: 100, confidence_floor: 0.7, description: 'Session management — list sessions grouped by project' },
     ],
   };
 
