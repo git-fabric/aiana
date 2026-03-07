@@ -44,7 +44,7 @@ async function registerWithGateway() {
   const mcpEndpoint = `http://${POD_IP}:${MCP_HTTP_PORT || 8200}/mcp`;
   const body = {
     fabric_id: 'fabric-aiana',
-    as_number: 65005,
+    as_number: 65010,
     version: app.version,
     mcp_endpoint: mcpEndpoint,
     ollama_endpoint: process.env.OLLAMA_ENDPOINT || 'http://ollama.fabric-sdk:11434',
