@@ -1,0 +1,64 @@
+/**
+ * @git-fabric/aiana — shared types
+ *
+ * Adapter interfaces decouple the memory layers from any specific
+ * vector-store or embedding implementation. Consumers (gateway, CLI)
+ * provide concrete adapters at runtime via createAdapterFromEnv().
+ */
+export interface MemoryRecord {
+    id: string;
+    content: string;
+    project?: string;
+    memoryType: "note" | "preference" | "pattern" | "insight" | "conversation";
+    sessionId?: string;
+    timestamp: string;
+    score?: number;
+    metadata?: Record<string, unknown>;
+}
+export interface AianaAdapter {
+    addMemory(content: string, opts: {
+        project?: string;
+        memoryType?: string;
+        sessionId?: string;
+    }): Promise<string>;
+    searchMemories(query: number[], opts: {
+        project?: string;
+        limit?: number;
+        minScore?: number;
+    }): Promise<MemoryRecord[]>;
+    getMemoriesByProject(project: string, limit: number): Promise<MemoryRecord[]>;
+    deleteMemory(id: string): Promise<void>;
+    exportMemories(project?: string): Promise<MemoryRecord[]>;
+    importMemories(memories: MemoryRecord[]): Promise<number>;
+    recordFeedback(memoryId: string, query: string, rating: number, reason?: string): Promise<void>;
+    embed(text: string): Promise<number[]>;
+    getStats(): Promise<{
+        totalMemories: number;
+        byProject: Record<string, number>;
+        embeddingModel: string;
+        collection: string;
+    }>;
+    health(): Promise<{
+        status: "healthy" | "degraded" | "unavailable";
+        latencyMs: number;
+    }>;
+}
+export interface FabricTool {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+export interface FabricApp {
+    name: string;
+    version: string;
+    description: string;
+    tools: FabricTool[];
+    health: () => Promise<{
+        app: string;
+        status: "healthy" | "degraded" | "unavailable";
+        latencyMs?: number;
+        details?: Record<string, unknown>;
+    }>;
+}
+//# sourceMappingURL=types.d.ts.map
