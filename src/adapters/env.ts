@@ -3,24 +3,99 @@
  *
  * Creates an AianaAdapter from environment variables.
  * Uses fetch() for the Qdrant REST API — no qdrant-client npm package.
- * Uses the OpenAI SDK only for text-embedding-3-small.
+ * Uses native fetch() for embeddings — no openai npm package needed.
+ *
+ * Embedding dispatch (in priority order):
+ *   1. Ollama — if OLLAMA_ENDPOINT is set (default: http://localhost:11434)
+ *      Model via OLLAMA_EMBED_MODEL (default: nomic-embed-text)
+ *   2. OpenAI — if OPENAI_API_KEY is set and no Ollama endpoint configured
+ *      Model via OPENAI_EMBED_MODEL (default: text-embedding-3-small)
  *
  * Required env vars:
- *   QDRANT_URL      — Qdrant Cloud base URL (e.g. https://xxx.qdrant.io:6333)
- *   QDRANT_API_KEY  — Qdrant Cloud API key
- *   OPENAI_API_KEY  — OpenAI API key for embeddings
+ *   QDRANT_URL      — Qdrant base URL (e.g. https://xxx.qdrant.io:6333)
+ *   QDRANT_API_KEY  — Qdrant API key
+ *
+ * Optional env vars:
+ *   OLLAMA_ENDPOINT    — Ollama base URL (default: http://localhost:11434)
+ *   OLLAMA_EMBED_MODEL — Ollama model for embeddings (default: nomic-embed-text)
+ *   OPENAI_API_KEY     — OpenAI API key (fallback if no Ollama)
+ *   OPENAI_EMBED_MODEL — OpenAI model for embeddings (default: text-embedding-3-small)
  */
 
 import { randomUUID } from "crypto";
-import OpenAI from "openai";
 import type { AianaAdapter, MemoryRecord } from "../types.js";
 import { scrubSensitive } from "../layers/scrub.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMS = 1536;
 const COLLECTION = "aiana_fabric__memories__v1";
+
+// ── Embedding backend detection ─────────────────────────────────────────────
+
+type EmbedBackend =
+  | { kind: "ollama"; endpoint: string; model: string }
+  | { kind: "openai"; apiKey: string; model: string };
+
+function detectEmbedBackend(): EmbedBackend {
+  const ollamaEndpoint = process.env.OLLAMA_ENDPOINT;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  // Ollama is preferred if endpoint is explicitly set, OR if no OpenAI key
+  if (ollamaEndpoint || !openaiKey) {
+    return {
+      kind: "ollama",
+      endpoint: ollamaEndpoint || "http://localhost:11434",
+      model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
+    };
+  }
+
+  return {
+    kind: "openai",
+    apiKey: openaiKey,
+    model: process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small",
+  };
+}
+
+// ── Embedding helpers ───────────────────────────────────────────────────────
+
+async function embedOllama(
+  endpoint: string,
+  model: string,
+  text: string,
+): Promise<number[]> {
+  const res = await fetch(`${endpoint}/api/embed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, input: text }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(no body)");
+    throw new Error(`Ollama embed → HTTP ${res.status}: ${body}`);
+  }
+  const data = (await res.json()) as { embeddings: number[][] };
+  return data.embeddings[0];
+}
+
+async function embedOpenAI(
+  apiKey: string,
+  model: string,
+  text: string,
+): Promise<number[]> {
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model, input: text }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(no body)");
+    throw new Error(`OpenAI embed → HTTP ${res.status}: ${body}`);
+  }
+  const data = (await res.json()) as { data: Array<{ embedding: number[] }> };
+  return data.data[0].embedding;
+}
 
 // ── Qdrant REST helpers ──────────────────────────────────────────────────────
 
@@ -75,7 +150,11 @@ async function qdrantRequest<T>(
 
 // ── Collection bootstrap ─────────────────────────────────────────────────────
 
-async function ensureCollection(baseUrl: string, apiKey: string): Promise<void> {
+async function ensureCollection(
+  baseUrl: string,
+  apiKey: string,
+  dims: number,
+): Promise<void> {
   // Check if collection already exists
   try {
     await qdrantRequest(baseUrl, apiKey, "GET", `/collections/${COLLECTION}`);
@@ -86,10 +165,9 @@ async function ensureCollection(baseUrl: string, apiKey: string): Promise<void> 
 
   await qdrantRequest(baseUrl, apiKey, "PUT", `/collections/${COLLECTION}`, {
     vectors: {
-      size: EMBEDDING_DIMS,
+      size: dims,
       distance: "Cosine",
     },
-    // Store embedding model in collection config comment via on_disk_payload
     on_disk_payload: false,
   });
 
@@ -143,31 +221,63 @@ function pointToRecord(point: QdrantScoredPoint | QdrantPoint, score?: number): 
 // ── createAdapterFromEnv ─────────────────────────────────────────────────────
 
 export function createAdapterFromEnv(): AianaAdapter {
-  const qdrantUrl = process.env.QDRANT_URL;
-  if (!qdrantUrl) throw new Error("QDRANT_URL environment variable is required");
+  const qdrantUrlRaw = process.env.QDRANT_URL;
+  if (!qdrantUrlRaw) throw new Error("QDRANT_URL environment variable is required");
+  const qdrantUrl: string = qdrantUrlRaw;
 
-  const qdrantApiKey = process.env.QDRANT_API_KEY;
-  if (!qdrantApiKey) throw new Error("QDRANT_API_KEY environment variable is required");
+  const qdrantApiKeyRaw = process.env.QDRANT_API_KEY;
+  if (!qdrantApiKeyRaw) throw new Error("QDRANT_API_KEY environment variable is required");
+  const qdrantApiKey: string = qdrantApiKeyRaw;
 
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  if (!openaiApiKey) throw new Error("OPENAI_API_KEY environment variable is required");
+  const backend = detectEmbedBackend();
+  const embeddingModelLabel =
+    backend.kind === "ollama"
+      ? `ollama/${backend.model}`
+      : `openai/${backend.model}`;
 
-  const openai = new OpenAI({ apiKey: openaiApiKey });
+  console.log(`[@git-fabric/aiana] Embedding backend: ${embeddingModelLabel}`);
 
-  // Ensure collection on startup (fire-and-forget; errors surface on first use)
-  const ready = ensureCollection(qdrantUrl, qdrantApiKey).catch((e) =>
-    console.error("[@git-fabric/aiana] Collection bootstrap failed:", e),
-  );
+  // Auto-detect embedding dimensions on first embed call,
+  // then bootstrap the collection with the correct size.
+  let detectedDims: number | null = null;
+  let collectionReady: Promise<void> | null = null;
+
+  async function doEmbed(text: string): Promise<number[]> {
+    if (backend.kind === "ollama") {
+      return embedOllama(backend.endpoint, backend.model, text);
+    }
+    return embedOpenAI(backend.apiKey, backend.model, text);
+  }
+
+  async function ensureReady(dims: number): Promise<void> {
+    if (!collectionReady) {
+      collectionReady = ensureCollection(qdrantUrl, qdrantApiKey, dims).catch(
+        (e) =>
+          console.error(
+            "[@git-fabric/aiana] Collection bootstrap failed:",
+            e,
+          ),
+      ) as Promise<void>;
+    }
+    await collectionReady;
+  }
 
   const adapter: AianaAdapter = {
     // ── Embedding ─────────────────────────────────────────────────────────
 
     async embed(text: string): Promise<number[]> {
-      const res = await openai.embeddings.create({
-        model: EMBEDDING_MODEL,
-        input: text,
-      });
-      return res.data[0].embedding;
+      const vec = await doEmbed(text);
+
+      // Auto-detect dimensions on first call and bootstrap collection
+      if (detectedDims === null) {
+        detectedDims = vec.length;
+        console.log(
+          `[@git-fabric/aiana] Detected ${detectedDims} embedding dimensions`,
+        );
+        await ensureReady(detectedDims);
+      }
+
+      return vec;
     },
 
     // ── Core CRUD ─────────────────────────────────────────────────────────
@@ -176,8 +286,6 @@ export function createAdapterFromEnv(): AianaAdapter {
       content: string,
       opts: { project?: string; memoryType?: string; sessionId?: string },
     ): Promise<string> {
-      await ready;
-
       const clean = scrubSensitive(content);
       const id = randomUUID();
       const vector = await adapter.embed(clean);
@@ -205,7 +313,8 @@ export function createAdapterFromEnv(): AianaAdapter {
       query: number[],
       opts: { project?: string; limit?: number; minScore?: number },
     ): Promise<MemoryRecord[]> {
-      await ready;
+      // Ensure collection is ready (may not have been if no embed call yet)
+      if (detectedDims !== null) await ensureReady(detectedDims);
 
       const filter =
         opts.project
@@ -232,7 +341,7 @@ export function createAdapterFromEnv(): AianaAdapter {
     },
 
     async getMemoriesByProject(project: string, limit: number): Promise<MemoryRecord[]> {
-      await ready;
+      if (detectedDims !== null) await ensureReady(detectedDims);
 
       const result = await qdrantRequest<{
         result: { points: Array<{ id: string; payload: QdrantPoint["payload"] }> };
@@ -259,7 +368,7 @@ export function createAdapterFromEnv(): AianaAdapter {
     },
 
     async deleteMemory(id: string): Promise<void> {
-      await ready;
+      if (detectedDims !== null) await ensureReady(detectedDims);
       await qdrantRequest(
         qdrantUrl,
         qdrantApiKey,
@@ -270,7 +379,7 @@ export function createAdapterFromEnv(): AianaAdapter {
     },
 
     async exportMemories(project?: string): Promise<MemoryRecord[]> {
-      await ready;
+      if (detectedDims !== null) await ensureReady(detectedDims);
 
       const filter = project
         ? { must: [{ key: "project", match: { value: project } }] }
@@ -318,8 +427,6 @@ export function createAdapterFromEnv(): AianaAdapter {
     },
 
     async importMemories(memories: MemoryRecord[]): Promise<number> {
-      await ready;
-
       if (memories.length === 0) return 0;
 
       // Batch embed all contents, then upsert in chunks
@@ -365,7 +472,7 @@ export function createAdapterFromEnv(): AianaAdapter {
       rating: number,
       reason?: string,
     ): Promise<void> {
-      await ready;
+      if (detectedDims !== null) await ensureReady(detectedDims);
 
       // Store feedback by updating the memory's metadata payload
       const timestamp = new Date().toISOString();
@@ -396,7 +503,7 @@ export function createAdapterFromEnv(): AianaAdapter {
       embeddingModel: string;
       collection: string;
     }> {
-      await ready;
+      if (detectedDims !== null) await ensureReady(detectedDims);
 
       // Get collection info for total count
       const info = await qdrantRequest<{
@@ -416,7 +523,7 @@ export function createAdapterFromEnv(): AianaAdapter {
       return {
         totalMemories,
         byProject,
-        embeddingModel: EMBEDDING_MODEL,
+        embeddingModel: embeddingModelLabel,
         collection: COLLECTION,
       };
     },
