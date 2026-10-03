@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/banner.svg" alt="aiana: Semantic memory, session context and cross-project recall" width="100%"></p>
+
 # @git-fabric/aiana
 
 Aiana memory fabric — semantic memory, session context, and cross-project recall as a composable MCP layer.
@@ -130,3 +132,8 @@ All content is scrubbed before embedding and storage. Redacted patterns:
 ## License
 
 MIT
+
+<!-- org-footer -->
+---
+
+<p align="center"><sub>Part of <a href="https://github.com/git-fabric">git-fabric</a> · composable fabric apps for Git-native infrastructure · built by <a href="https://github.com/ry-ops">ry-ops</a></sub></p>
