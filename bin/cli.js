@@ -14,7 +14,7 @@ function buildServer() {
   const server = new Server({ name: app.name, version: app.version }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: app.tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
+    tools: app.tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, ...(t.annotations && { annotations: t.annotations }) })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {

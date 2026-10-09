@@ -31,6 +31,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_search",
       description:
         "Semantic search over stored memories. Returns memories ranked by relevance to the query.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -53,6 +54,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_add",
       description:
         "Store a new memory. Content is automatically scrubbed for secrets before embedding and storage.",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -79,6 +81,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_recall",
       description:
         "Recall the most relevant memories for a project. Uses the project name as a semantic seed and returns the top-N most relevant memories scoped to that project.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -98,6 +101,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
     {
       name: "aiana_memory_delete",
       description: "Permanently delete a memory by its ID.",
+      annotations: { readOnlyHint: false, destructiveHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -115,6 +119,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_export",
       description:
         "Export all stored memories as an array of memory records (JSONL-compatible). Optionally filter by project.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -129,6 +134,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_import",
       description:
         "Import memories from a previously exported array of memory records. Duplicate IDs are overwritten.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -167,6 +173,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_session_list",
       description:
         "List sessions grouped by project. Sessions are derived from memories that share a sessionId. Returns sessions sorted by most-recent activity.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -188,6 +195,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_preference_add",
       description:
         "Store a user preference as a memory with type=preference. Preferences are searchable and recallable like any other memory.",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -211,6 +219,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_memory_feedback",
       description:
         "Record feedback on a recalled memory to improve future relevance. Rating: 1=helpful, 0=neutral, -1=not helpful.",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -239,6 +248,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
       name: "aiana_status",
       description:
         "Return collection stats: total memory count, memories per project, embedding model, and collection name.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {},
@@ -249,6 +259,7 @@ export function createApp(adapterOverride?: AianaAdapter): FabricApp {
     {
       name: "aiana_health",
       description: "Ping Qdrant Cloud and return connection status and latency.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         type: "object",
         properties: {},
